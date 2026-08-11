@@ -46,6 +46,37 @@ FX_LITE/
 
 ---
 
+## System Architecture
+
+```mermaid
+graph TD
+    Client[Client App / cURL] -->|HTTP POST/GET| Router[Express Router]
+    Router --> Controllers[Controllers<br/>Rate, Transaction, Wallet]
+    Controllers --> Services[Services<br/>Business Logic Layer]
+    Services --> Models[Models<br/>Data Access Layer]
+    
+    subgraph Services Layer
+        Services -.-> RateSvc[RateService]
+        Services -.-> TxSvc[TransactionService]
+        Services -.-> WalletSvc[WalletService]
+    end
+    
+    RateSvc -->|HTTP GET /latest| Frankfurter[Frankfurter API]
+    TxSvc --> RateSvc
+    TxSvc --> WalletSvc
+    TxSvc --> Models
+    WalletSvc --> Models
+    
+    subgraph Data Layer
+        Models -.-> TxModel[Transaction]
+        Models -.-> WalletModel[Wallet]
+    end
+    
+    Models -->|better-sqlite3| DB[(SQLite Database)]
+```
+
+---
+
 ## Quick Start (Local)
 
 ```bash
@@ -164,6 +195,31 @@ curl http://localhost:3000/api/transaction/101
 
 ---
 
+## Database Schema (ER Diagram)
+
+```mermaid
+erDiagram
+    WALLETS {
+        INTEGER id PK "AUTOINCREMENT"
+        TEXT userId FK "Indexed"
+        TEXT currency "e.g., USD, INR"
+        REAL balance "Default 0"
+    }
+    
+    TRANSACTIONS {
+        TEXT transactionId PK "UUID"
+        TEXT userId FK "Indexed"
+        TEXT fromCurrency
+        TEXT toCurrency
+        REAL amountDeducted
+        REAL exchangeRate
+        REAL amountCredited
+        DATETIME timestamp "Default CURRENT_TIMESTAMP"
+    }
+```
+
+---
+
 ## Transaction Logic (Requirement #5)
 
 The `POST /api/transaction/convert` endpoint performs the following steps atomically:
@@ -175,6 +231,50 @@ The `POST /api/transaction/convert` endpoint performs the following steps atomic
    - Deduct from `fromCurrency` wallet.
    - Credit `toCurrency` wallet (auto-creates the wallet row if first time).
    - Insert immutable ledger row into `transactions` table.
+
+### Execution Flow (Sequence Diagram)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Controller as TransactionController
+    participant TxSvc as TransactionService
+    participant WalletSvc as WalletService
+    participant RateSvc as RateService
+    participant API as Frankfurter API
+    participant DB as SQLite (Transaction)
+
+    Client->>Controller: POST /convert (USD to INR, 100)
+    Controller->>TxSvc: convert()
+    
+    rect rgb(240, 248, 255)
+        Note over TxSvc,WalletSvc: 1. Fast Fail Check
+        TxSvc->>WalletSvc: assertSufficientFunds(USD, 100)
+        WalletSvc-->>TxSvc: OK
+    end
+
+    rect rgb(255, 245, 238)
+        Note over TxSvc,API: 2. External I/O (Outside DB Lock)
+        TxSvc->>RateSvc: getRate(USD, INR)
+        RateSvc->>API: GET /latest?from=USD&to=INR
+        API-->>RateSvc: 200 OK (Rate: 83.50)
+        RateSvc-->>TxSvc: rate = 83.50
+    end
+
+    rect rgb(240, 255, 240)
+        Note over TxSvc,DB: 3. Atomic DB Transaction (BEGIN/COMMIT)
+        TxSvc->>DB: BEGIN TRANSACTION
+        TxSvc->>WalletSvc: debit(USD, 100)
+        WalletSvc->>DB: UPDATE wallets SET balance = balance - 100
+        TxSvc->>WalletSvc: credit(INR, 8350)
+        WalletSvc->>DB: INSERT/UPDATE wallets SET balance = balance + 8350
+        TxSvc->>DB: INSERT INTO transactions (...)
+        TxSvc->>DB: COMMIT (or ROLLBACK on error)
+    end
+
+    TxSvc-->>Controller: Ledger Entry Created
+    Controller-->>Client: 201 Created (Success)
+```
 
 ---
 
