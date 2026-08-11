@@ -1,0 +1,25 @@
+{
+  "name": "fx-lite",
+  "version": "1.0.0",
+  "description": "FX-Lite: Real-time Currency Exchange & Ledger API - a lightweight cross-border payments microservice",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "init-db": "node scripts/initDb.js",
+    "test": "node scripts/test.js",
+    "test:full": "node -e \"const {spawn}=require('child_process'),s=spawn('node',['server.js'],{stdio:'inherit'});setTimeout(()=>{const t=spawn('node',['scripts/test.js'],{stdio:'inherit'});t.on('exit',c=>{s.kill();process.exit(c);});},2000);\""
+  },
+  "keywords": ["fx", "currency", "ledger", "express", "sqlite"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.21.0",
+    "dotenv": "^16.4.5"
+  }
+}
