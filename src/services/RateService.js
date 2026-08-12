@@ -6,7 +6,7 @@ const ApiError = require('../utils/ApiError');
 require('dotenv').config();
 
 const FRANKFURTER_BASE_URL =
-  process.env.FRANKFURTER_BASE_URL || 'https://api.frankfurter.app';
+  process.env.FRANKFURTER_BASE_URL || 'https://api.frankfurter.dev/v2';
 
 /**
  * RateService
@@ -42,19 +42,19 @@ class RateService {
     }
 
     try {
-      // validateStatus: () => true tells axios NEVER to throw on any HTTP
-      // status. We inspect the status ourselves below so we can return the
-      // correct code to OUR client (4xx upstream → 400 client error;
-      // 5xx upstream / network timeout → 502 bad gateway).
-      const response = await this.http.get(`${this.baseUrl}/latest`, {
-        params: { from: base, to: target },
-        timeout: 5000,
-        validateStatus: () => true,
-      });
+      // Frankfurter v2 API: GET /rate/{base}/{quote}
+      // Returns: { date, base, quote, rate }  (rate is a flat number, not nested)
+      // validateStatus: () => true — we inspect status ourselves so we can
+      // map 4xx upstream → 400 (caller's fault) and 5xx → 502 (infra failure).
+      const response = await this.http.get(
+        `${this.baseUrl}/rate/${base}/${target}`,
+        {
+          timeout: 5000,
+          validateStatus: () => true,
+        }
+      );
 
-      // Frankfurter sends a 404 for completely unknown base currencies
-      // (e.g. "FAKE"). That is the CALLER's fault, not an infrastructure
-      // failure → map to 400.
+      // Frankfurter v2 returns 404 for unknown currency codes → caller's fault → 400.
       if (response.status === 404 || response.status === 400) {
         throw ApiError.badRequest(
           `Unsupported currency pair: ${base} -> ${target}`
@@ -70,11 +70,10 @@ class RateService {
         });
       }
 
-      const rate = response.data?.rates?.[target];
+      // v2 response: { date: "2026-08-12", base: "USD", quote: "INR", rate: 95.38 }
+      const rate = response.data?.rate;
 
       if (typeof rate !== 'number') {
-        // Frankfurter returns 200 with an empty `rates` object when the
-        // TARGET currency is unknown. Still the caller's fault → 400.
         throw ApiError.badRequest(
           `Unsupported currency pair: ${base} -> ${target}`
         );

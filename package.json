@@ -11,7 +11,12 @@
     "dev": "node --watch server.js",
     "init-db": "node scripts/initDb.js",
     "test": "node scripts/test.js",
-    "test:full": "node -e \"const {spawn}=require('child_process'),s=spawn('node',['server.js'],{stdio:'inherit'});setTimeout(()=>{const t=spawn('node',['scripts/test.js'],{stdio:'inherit'});t.on('exit',c=>{s.kill();process.exit(c);});},2000);\""
+    "test:full": "node -e \"const {spawn}=require('child_process'),s=spawn('node',['server.js'],{stdio:'inherit'});setTimeout(()=>{const t=spawn('node',['scripts/test.js'],{stdio:'inherit'});t.on('exit',c=>{s.kill();process.exit(c);});},2000);\"",
+    "build-engine": "make -C fx_core all",
+    "build-engine:clean": "make -C fx_core clean && make -C fx_core all",
+    "test-engine": "node scripts/test_engine.js",
+    "test-engine:unit": "make -C fx_core test",
+    "test-engine:valgrind": "make -C fx_core valgrind"
   },
   "keywords": ["fx", "currency", "ledger", "express", "sqlite"],
   "author": "",
